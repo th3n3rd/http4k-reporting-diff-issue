@@ -1,0 +1,13 @@
+# IntelliJ
+.idea/
+*.iws
+out/
+
+### Gradle template
+.gradle
+**/build/
+!src/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
