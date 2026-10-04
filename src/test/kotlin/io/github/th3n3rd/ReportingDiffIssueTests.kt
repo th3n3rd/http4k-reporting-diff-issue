@@ -48,6 +48,20 @@ class ReportingDiffIssueTests {
     }
 
     @Test
+    fun `does not expose pii (functional server with proxy clean)`() {
+        val upstream = FakeUpstream()
+        val client = ClientFilters.SetBaseUriFrom(Uri.of("http://upstream"))
+            .then(ResponseFilters.ReportHttpTransaction { events(PiiSafeOutgoing(it)) })
+            .then(ClientFilters.CleanProxy())
+            .then(upstream)
+
+        val response = client(Request(GET, "/details/http4k"))
+
+        response shouldHaveStatus OK
+        logs.toString() shouldNotContain "http4k"
+    }
+
+    @Test
     fun `does not expose pii (functional server as routing with else matcher)`() {
         val upstream = FakeUpstream()
         val client = ClientFilters.SetBaseUriFrom(Uri.of("http://upstream"))
