@@ -8,6 +8,8 @@ import org.http4k.core.Method.GET
 import org.http4k.core.Request
 import org.http4k.core.Response
 import org.http4k.core.Status
+import org.http4k.core.Status.Companion.BAD_REQUEST
+import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Uri
 import org.http4k.core.then
 import org.http4k.events.AutoMarshallingEvents
@@ -15,8 +17,12 @@ import org.http4k.events.HttpEvent
 import org.http4k.events.ProtocolEvent
 import org.http4k.filter.ClientFilters
 import org.http4k.filter.ResponseFilters
+import org.http4k.filter.debug
 import org.http4k.format.Jackson
+import org.http4k.kotest.shouldHaveStatus
+import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
+import org.http4k.routing.orElse
 import org.http4k.routing.routes
 import org.http4k.server.SunHttp
 import org.http4k.server.asServer
@@ -29,14 +35,41 @@ class ReportingDiffIssueTests {
     private val events = AutoMarshallingEvents(Jackson) { logs.appendLine(it) }
 
     @Test
-    fun `does not expose pii (functional server)`() {
+    fun `does not expose pii (functional server as is)`() {
         val upstream = FakeUpstream()
         val client = ClientFilters.SetBaseUriFrom(Uri.of("http://upstream"))
             .then(ResponseFilters.ReportHttpTransaction { events(PiiSafeOutgoing(it)) })
             .then(upstream)
 
-        client(Request(GET, "/details/http4k"))
+        val response = client(Request(GET, "/details/http4k"))
 
+        response shouldHaveStatus OK
+        logs.toString() shouldNotContain "http4k"
+    }
+
+    @Test
+    fun `does not expose pii (functional server as routing with else matcher)`() {
+        val upstream = FakeUpstream()
+        val client = ClientFilters.SetBaseUriFrom(Uri.of("http://upstream"))
+            .then(ResponseFilters.ReportHttpTransaction { events(PiiSafeOutgoing(it)) })
+            .then(routes(orElse bind upstream))
+
+        val response = client(Request(GET, "/details/http4k"))
+
+        response shouldHaveStatus OK
+        logs.toString() shouldNotContain "http4k"
+    }
+
+    @Test
+    fun `does not expose pii (functional server as routing with catch-all path)`() {
+        val upstream = FakeUpstream()
+        val client = ClientFilters.SetBaseUriFrom(Uri.of("http://upstream"))
+            .then(ResponseFilters.ReportHttpTransaction { events(PiiSafeOutgoing(it)) })
+            .then(routes("/{catch-all:.*}" bind upstream))
+
+        val response = client(Request(GET, "/details/http4k"))
+
+        response shouldHaveStatus OK
         logs.toString() shouldNotContain "http4k"
     }
 
@@ -47,14 +80,15 @@ class ReportingDiffIssueTests {
             .then(ResponseFilters.ReportHttpTransaction { events(PiiSafeOutgoing(it)) })
             .then(JavaHttpClient())
 
-        client(Request(GET, "/details/http4k"))
+        val response = client(Request(GET, "/details/http4k"))
 
+        response shouldHaveStatus OK
         logs.toString() shouldNotContain "http4k"
     }
 
     class FakeUpstream : ChaoticHttpHandler() {
         override val app = routes(
-            "/details/{pii}" bind GET to { Response(Status.OK) }
+            "/details/{pii}" bind GET to { Response(OK) }
         )
     }
 
